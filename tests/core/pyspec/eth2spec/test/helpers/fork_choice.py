@@ -3,6 +3,7 @@ from eth2spec.test.exceptions import BlockNotFoundException
 from eth2spec.test.helpers.attestations import (
     next_epoch_with_attestations,
     next_slots_with_attestations,
+    state_transition_with_full_block,
 )
 
 
@@ -261,6 +262,33 @@ def apply_next_slots_with_attestations(spec,
     assert store.block_states[block_root].hash_tree_root() == post_state.hash_tree_root()
 
     return post_state, store, last_signed_block
+
+
+def find_next_justifying_slot(spec,
+                              state,
+                              fill_cur_epoch,
+                              fill_prev_epoch,
+                              participation_fn=None):
+    temp_state = state.copy()
+
+    signed_blocks = []
+    justified_slot = None
+    while justified_slot is None:
+        signed_block = state_transition_with_full_block(
+            spec,
+            temp_state,
+            fill_cur_epoch,
+            fill_prev_epoch,
+            participation_fn,
+        )
+        signed_blocks.append(signed_block)
+        if (temp_state.slot - 1) % spec.SLOTS_PER_EPOCH != 0:
+            temp_state_2 = temp_state.copy()
+            spec.process_justification_and_finalization(temp_state_2)
+            if temp_state_2.current_justified_checkpoint != temp_state.current_justified_checkpoint:
+                justified_slot = temp_state_2.slot
+
+    return signed_blocks, justified_slot
 
 
 def get_pow_block_file_name(pow_block):
